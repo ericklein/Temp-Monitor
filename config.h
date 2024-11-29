@@ -7,7 +7,7 @@
 
 // Configuration Step 2: Set debug message output
 // comment out to turn off; 1 = summary, 2 = verbose
-// #define DEBUG 2
+// #define DEBUG 1
 
 // Configuration Step 3: simulate WiFi and sensor hardware,
 // returning random but plausible values
@@ -19,9 +19,9 @@
 // #define HASSIO_MQTT  // And, if MQTT enabled, with Home Assistant too?
 #define INFLUX       // Log data to remote InfluxDB server
 
-// Configuration Step 5: Select environment sensor
-#define BME280	// use BME280 to read temperature and humidity
-// #define AHTX0		// use AHTX0 sensor
+// Configuration Step 5: Select temperature and humidity sensor
+#define BME280	// use BME280
+// #define AHTX0		// use AHTX0
 
 // Configuration Step 6: Set battery size, if applicable
 // If LC709203F detected on i2c, define battery pack based on settings curve from datasheet
@@ -46,11 +46,11 @@
 // Sample and reporting intervals
 #ifdef DEBUG
   // time between samples in seconds
-  const uint8_t sensorSampleInterval = 60;
+  const uint16_t sensorSampleInterval = 60;
   // number of samples to average
   const uint8_t sensorSampleSize = 2;
 #else
-  const uint8_t sensorSampleInterval = 300;
+  const uint16_t sensorSampleInterval = 300;
   const uint8_t sensorSampleSize = 6;
 #endif
 
