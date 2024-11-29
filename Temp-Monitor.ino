@@ -13,8 +13,9 @@
 Preferences nvStorage;
 
 // global variables
-float averageTempF;
-float averageHumidity;
+// IMPROVEMENT: nvStorageRead() should return these locally
+float accumulatingTempF;
+float accumulatingHumidity;
 
 // environment sensor data
 typedef struct {
@@ -109,23 +110,25 @@ void setup() {
     powerDisable(hardwareRebootInterval);
   }
 
-  int8_t sampleCounter = nvStorageRead();
+  uint8_t sampleCounter = nvStorageRead();
   sampleCounter++;
-  debugMessage(String("Sample count: ") + sampleCounter,1);
+  debugMessage(String("Sample count: ") + (sampleCounter) + " of " + sensorSampleSize,1);
 
-  if (sampleCounter < sensorSampleSize-1) {
+  accumulatingTempF += sensorData.ambientTemperatureF;
+  accumulatingHumidity += sensorData.ambientHumidity;
+
+  if (sampleCounter < sensorSampleSize) {
     // add to the accumulating, intermediate sensor values, then sleep device
-    nvStorageWrite(sampleCounter, sensorData.ambientTemperatureF + averageTempF, sensorData.ambientHumidity + averageHumidity);
+    nvStorageWrite(sampleCounter, accumulatingTempF, accumulatingHumidity);
     powerDisable(sensorSampleInterval);
   }
 
   // this code only executes if sampleCounter == sensorSampleSize
   // average values, send to network endpoint if possible, reset values, then sleep device
 
-  // add in most recent sample then average
-  averageTempF = ((sensorData.ambientTemperatureF + averageTempF) / sensorSampleSize);
-  averageHumidity = ((sensorData.ambientHumidity + averageHumidity) / sensorSampleSize);
-  debugMessage(String("Reporting averaged Temp:") + averageTempF + "F, Humidity:" + averageHumidity, 1);
+  float averageTempF = accumulatingTempF / sampleCounter;
+  float averageHumidity = accumulatingHumidity / sampleCounter;
+  debugMessage(String("Reporting averaged TempF:") + averageTempF + "F, Humidity:" + averageHumidity, 1);
 
   if (!batteryRead(batteryReadsPerSample))
     hardwareData.batteryVoltage = 0;
@@ -145,7 +148,7 @@ void setup() {
           // Either configure sensors in Home Assistant's configuration.yaml file
           // directly or attempt to do it via MQTT auto-discovery
           // hassio_mqtt_setup();  // Config for MQTT auto-discovery
-          hassio_mqtt_publish(sensorData.ambientTemperatureF, sensorData.ambientHumidity, hardwareData.batteryVoltage);
+          hassio_mqtt_publish(averageTempF, averageHumidity, hardwareData.batteryVoltage);
       #endif
     #endif
 
@@ -158,7 +161,7 @@ void setup() {
     #endif
   }
   //reset nvStorage values for next recording period
-  nvStorageWrite(-1, 0, 0);
+  nvStorageWrite(0, 0, 0);
   powerDisable(sensorSampleInterval);
 }
 
@@ -312,30 +315,30 @@ uint8_t nvStorageRead()
 // read data from ESP32 NV storage and store in appropriate global variables
 {
   nvStorage.begin("air-quality", false);
-  int8_t storedCounter = nvStorage.getInt("counter", -1);  // counter tracks a 0 based array
+  uint8_t storedCounter = nvStorage.getInt("counter", 0);  // counter tracks a 0 based array
   debugMessage(String("Sample count FROM nv storage is ") + storedCounter, 2);
 
   // read value or insert current sensor reading if this is the first read from nv storage
-  averageTempF = nvStorage.getFloat("temp", 0);
+  accumulatingTempF = nvStorage.getFloat("temp", 0);
   // BME280 often issues nan when not configured properly
-  if (isnan(averageTempF)) {
+  if (isnan(accumulatingTempF)) {
     // bad value, replace with current temp
-    averageTempF = (sensorData.ambientTemperatureF * storedCounter);
+    accumulatingTempF = (sensorData.ambientTemperatureF * storedCounter);
     debugMessage("Unexpected temperatureF value in nv storage replaced with multiple of current temperature", 2);
   }
 
-  averageHumidity = nvStorage.getFloat("humidity", 0);
-  if (isnan(averageHumidity)) {
+  accumulatingHumidity = nvStorage.getFloat("humidity", 0);
+  if (isnan(accumulatingHumidity)) {
     // bad value, replace with current temp
-    averageHumidity = (sensorData.ambientHumidity * storedCounter);
+    accumulatingHumidity = (sensorData.ambientHumidity * storedCounter);
     debugMessage("Unexpected humidity value in nv storage replaced with multiple of current humidity", 2);
   }
 
-  debugMessage(String("running totals FROM nv storage: TempF:") + averageTempF + ", Humidity:" + averageHumidity, 2);
+  debugMessage(String("running totals FROM nv storage: TempF:") + accumulatingTempF + ", Humidity:" + accumulatingHumidity, 2);
   return storedCounter;
 }
 
-void nvStorageWrite(int8_t counter, float accumulatedTempF, float accumulatedHumidity)
+void nvStorageWrite(uint8_t counter, float accumulatedTempF, float accumulatedHumidity)
 // write sample counter, accumulated tempF and humidity to ESP32 NV storage
 {
   nvStorage.putInt("counter", counter);
